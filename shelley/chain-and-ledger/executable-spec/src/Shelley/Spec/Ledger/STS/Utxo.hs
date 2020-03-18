@@ -70,6 +70,7 @@ instance
     | FeeTooSmallUTxO Coin Coin
     | ValueNotConservedUTxO (Value crypto) (Value crypto)
     | NegativeOutputsUTxO
+    | ForgingAda
     | UpdateFailure (PredicateFailure (PPUP crypto))
     deriving (Eq, Show, Generic)
   transitionRules = [utxoInductive]
@@ -93,7 +94,8 @@ instance
      (ValueNotConservedUTxO a b) -> encodeListLen 3 <> toCBOR (5 :: Word8)
                                       <> toCBOR a <> toCBOR b
      NegativeOutputsUTxO         -> encodeListLen 1 <> toCBOR (6 :: Word8)
-     (UpdateFailure a)           -> encodeListLen 2 <> toCBOR (7 :: Word8)
+     ForgingAda                  -> encodeListLen 1 <> toCBOR (7 :: Word8)
+     (UpdateFailure a)           -> encodeListLen 2 <> toCBOR (8 :: Word8)
                                       <> toCBOR a
 
 instance
@@ -126,7 +128,8 @@ instance
         b <- fromCBOR
         pure $ ValueNotConservedUTxO a b
       6 -> matchSize "NegativeOutputsUTxO" 1 n >> pure NegativeOutputsUTxO
-      7 -> do
+      7 -> matchSize "ForgingAda" 1 n >> pure ForgingAda
+      8 -> do
         matchSize "UpdateFailure" 2 n
         a <- fromCBOR
         pure $ UpdateFailure a
@@ -165,6 +168,11 @@ utxoInductive = do
 
   let outputValues = [v | (UTxOOut _ v) <- Set.toList (range (txouts txb))]
   all (valueToCompactValue zeroV <=) outputValues ?! NegativeOutputsUTxO
+
+  let (Value vls) = _forge txb
+  let cids = Map.keys vls
+  all (adaID /=) cids  ?! ForgingAda
+
 
   let maxTxSize_ = fromIntegral (_maxTxSize pp)
       txSize_ = txsize tx
