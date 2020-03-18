@@ -67,7 +67,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as BSL
 import           Data.Foldable (fold)
 import           Data.IP (IPv4, IPv6)
-import           Data.Map.Strict (Map)
+import           Data.Map.Strict (Map, filterWithKey)
 import qualified Data.Map.Strict as Map
 import           Data.Ord (comparing)
 import           Data.Sequence.Strict (StrictSeq)
@@ -99,6 +99,8 @@ import           Shelley.Spec.Ledger.Serialization (CBORGroup (..), CborSeq (..)
                      ipv4ToCBOR, ipv6FromCBOR, ipv6ToCBOR, mapFromCBOR, mapToCBOR,
                      unwrapCborStrictSeq)
 
+import           Shelley.Spec.Ledger.Scripts
+import           Shelley.Spec.Ledger.Value
 
 -- |The delegation of one stake key to another.
 data Delegation crypto = Delegation
@@ -186,6 +188,29 @@ instance Crypto crypto => ToCBOR (Wdrl crypto) where
 instance Crypto crypto => FromCBOR (Wdrl crypto) where
   fromCBOR = Wdrl <$> mapFromCBOR
 
+-- | get value from UTxO output
+getValue :: forall crypto. (Crypto crypto) => UTxOOut crypto -> Value crypto
+getValue (UTxOOut _ v) = compactValueToValue v
+
+-- | get address from UTxO output
+getAddress :: UTxOOut crypto -> Addr crypto
+getAddress (UTxOOut a _) = a
+
+-- | get value from Tx output
+getValueTx :: TxOut crypto -> Value crypto
+getValueTx (TxOut _ v) = v
+
+-- | get address from Tx output
+getAddressTx :: TxOut crypto -> Addr crypto
+getAddressTx (TxOut a _) = a
+
+-- | get coin amount from UTxO output
+getCoin :: Crypto crypto => UTxOOut crypto -> Coin
+getCoin (UTxOOut _ v) =
+  getAdaAmount $ Value $ filterWithKey (\k _ -> k==adaID) v'
+  where
+    Value v' = compactValueToValue v
+
 -- |A unique ID of a transaction, which is computable from the transaction.
 newtype TxId crypto
   = TxId { _TxId :: Hash crypto (TxBody crypto) }
@@ -202,12 +227,20 @@ data TxIn crypto
 
 instance NoUnexpectedThunks (TxIn crypto)
 
--- |The output of a UTxO.
+-- |The output of a Tx.
 data TxOut crypto
-  = TxOut !(Addr crypto) !Coin
+  = TxOut !(Addr crypto) !(Value crypto)
   deriving (Show, Eq, Generic, Ord)
 
 instance NoUnexpectedThunks (TxOut crypto)
+
+
+-- |The output of a UTxO.
+data UTxOOut crypto
+  = UTxOOut !(Addr crypto) !(CompactValue crypto)
+  deriving (Show, Eq, Generic, Ord)
+
+instance NoUnexpectedThunks (UTxOOut crypto)
 
 data DelegCert crypto =
     -- | A stake key registration certificate.
@@ -261,6 +294,7 @@ data TxBody crypto
       , _outputs'  :: !(StrictSeq (TxOut crypto))
       , _certs'    :: !(StrictSeq (DCert crypto))
       , _wdrls'    :: !(Wdrl crypto)
+      , _forge'    :: !(Value crypto)
       , _txfee'    :: !Coin
       , _ttl'      :: !SlotNo
       , _txUpdate' :: !(StrictMaybe (Update crypto))
@@ -462,19 +496,39 @@ instance (Crypto crypto) =>
 
 instance
   (Typeable crypto, Crypto crypto)
+  => ToCBOR (UTxOOut crypto)
+ where
+  toCBOR (UTxOOut addr value) =
+    encodeListLen (listLen addr + 1)
+      <> toCBORGroup addr
+      <> toCBOR value
+
+instance (Crypto crypto) =>
+  FromCBOR (UTxOOut crypto) where
+  fromCBOR = do
+    n <- decodeListLen
+    addr <- fromCBORGroup
+    b <- fromCBOR
+    matchSize "TxOut" ((fromIntegral . toInteger . listLen) addr + 1) n
+    pure $ UTxOOut addr b
+
+instance
+  (Typeable crypto, Crypto crypto)
   => ToCBOR (TxOut crypto)
  where
-  toCBOR (TxOut addr coin) =
-    encodeListLen 2
-      <> toCBOR addr
-      <> toCBOR coin
+  toCBOR (TxOut addr value) =
+    encodeListLen (listLen addr + 1)
+      <> toCBORGroup addr
+      <> toCBOR (valueToCompactValue value)
 
 instance (Crypto crypto) =>
   FromCBOR (TxOut crypto) where
-  fromCBOR = decodeRecordNamed "TxOut" (const 2) $ do
-    addr <- fromCBOR
-    (b :: Word64) <- fromCBOR
-    pure $ TxOut addr (Coin $ toInteger b)
+  fromCBOR = do
+    n <- decodeListLen
+    addr <- fromCBORGroup
+    b <- fromCBOR
+    matchSize "TxOut" ((fromIntegral . toInteger . listLen) addr + 1) n
+    pure $ TxOut addr (compactValueToValue b)
 
 instance
   Crypto crypto
@@ -507,9 +561,10 @@ instance
          2 -> fromCBOR                           >>= \x -> pure (2, \t -> t { _txfee'    = x })
          3 -> fromCBOR                           >>= \x -> pure (3, \t -> t { _ttl'      = x })
          4 -> (unwrapCborStrictSeq <$> fromCBOR) >>= \x -> pure (4, \t -> t { _certs'    = x })
-         5 -> fromCBOR                           >>= \x -> pure (5, \t -> t { _wdrls'    = x })
-         6 -> fromCBOR                           >>= \x -> pure (6, \t -> t { _txUpdate' = SJust x })
-         7 -> fromCBOR                           >>= \x -> pure (7, \t -> t { _mdHash'   = SJust x })
+         5 -> fromCBOR                           >>= \x -> pure (5, \t -> t { _forge'    = x })
+         6 -> fromCBOR                           >>= \x -> pure (6, \t -> t { _wdrls'    = x })
+         7 -> fromCBOR                           >>= \x -> pure (7, \t -> t { _txUpdate' = SJust x })
+         8 -> fromCBOR                           >>= \x -> pure (8, \t -> t { _mdHash'   = SJust x })
          k -> invalidKey k
      let requiredFields :: Map Int String
          requiredFields = Map.fromList $
@@ -531,6 +586,7 @@ instance
           , _txfee'   = Coin 0
           , _ttl'     = SlotNo 0
           , _certs'   = StrictSeq.empty
+          , _forge'   = Value Map.empty
           , _wdrls'   = Wdrl Map.empty
           , _txUpdate'= SNothing
           , _mdHash'  = SNothing

@@ -14,6 +14,7 @@ module Shelley.Spec.Ledger.STS.Epoch
 where
 
 import           Cardano.Prelude (NoUnexpectedThunks (..), asks)
+import           Cardano.Ledger.Shelley.Crypto
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           GHC.Generics (Generic)
@@ -34,7 +35,7 @@ import           Shelley.Spec.Ledger.STS.Snap
 
 data EPOCH crypto
 
-instance STS (EPOCH crypto) where
+instance (Crypto crypto) => STS (EPOCH crypto) where
     type State (EPOCH crypto) = EpochState crypto
     type Signal (EPOCH crypto) = EpochNo
     type Environment (EPOCH crypto) = ()
@@ -78,7 +79,7 @@ votedValuePParams (ProposedPPUpdates ppup) pps quorumN =
       1 -> (Just . updatePParams pps . fst . head . Map.toList) consensus
       _ -> Nothing
 
-epochTransition :: forall crypto . TransitionRule (EPOCH crypto)
+epochTransition :: forall crypto. (Crypto crypto) => TransitionRule (EPOCH crypto)
 epochTransition = do
   TRC (_, EpochState { esAccountState = acnt
                      , esSnapshots = ss
@@ -108,11 +109,11 @@ epochTransition = do
     pp'
     nm
 
-instance Embed (SNAP crypto) (EPOCH crypto) where
+instance (Crypto crypto) => Embed (SNAP crypto) (EPOCH crypto) where
     wrapFailed = SnapFailure
 
-instance Embed (POOLREAP crypto) (EPOCH crypto) where
+instance (Crypto crypto) => Embed (POOLREAP crypto) (EPOCH crypto) where
     wrapFailed = PoolReapFailure
 
-instance Embed (NEWPP crypto) (EPOCH crypto) where
+instance (Crypto crypto) => Embed (NEWPP crypto) (EPOCH crypto) where
     wrapFailed = NewPpFailure

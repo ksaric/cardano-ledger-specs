@@ -39,7 +39,9 @@ import           Shelley.Spec.Ledger.PParams
 import           Shelley.Spec.Ledger.Slot
 import           Shelley.Spec.Ledger.STS.Ppup
 import           Shelley.Spec.Ledger.Tx
+import           Shelley.Spec.Ledger.TxData (UTxOOut(..))
 import           Shelley.Spec.Ledger.UTxO
+import           Shelley.Spec.Ledger.Value
 
 data UTXO crypto
 
@@ -66,7 +68,7 @@ instance
     | MaxTxSizeUTxO Integer Integer
     | InputSetEmptyUTxO
     | FeeTooSmallUTxO Coin Coin
-    | ValueNotConservedUTxO Coin Coin
+    | ValueNotConservedUTxO (Value crypto) (Value crypto)
     | NegativeOutputsUTxO
     | UpdateFailure (PredicateFailure (PPUP crypto))
     deriving (Eq, Show, Generic)
@@ -161,8 +163,8 @@ utxoInductive = do
   -- process Protocol Parameter Update Proposals
   ppup' <- trans @(PPUP crypto) $ TRC (PPUPEnv slot pp genDelegs, ppup, txup tx)
 
-  let outputCoins = [c | (TxOut _ c) <- Set.toList (range (txouts txb))]
-  all (0 <=) outputCoins ?! NegativeOutputsUTxO
+  let outputValues = [v | (UTxOOut _ v) <- Set.toList (range (txouts txb))]
+  all (valueToCompactValue zeroV <=) outputValues ?! NegativeOutputsUTxO
 
   let maxTxSize_ = fromIntegral (_maxTxSize pp)
       txSize_ = txsize tx
