@@ -39,7 +39,7 @@ import           Shelley.Spec.Ledger.PParams
 import           Shelley.Spec.Ledger.Slot
 import           Shelley.Spec.Ledger.STS.Ppup
 import           Shelley.Spec.Ledger.Tx
-import           Shelley.Spec.Ledger.TxData (UTxOOut(..))
+import           Shelley.Spec.Ledger.TxData (getValue)
 import           Shelley.Spec.Ledger.UTxO
 import           Shelley.Spec.Ledger.Value
 
@@ -166,16 +166,8 @@ utxoInductive = do
   -- process Protocol Parameter Update Proposals
   ppup' <- trans @(PPUP crypto) $ TRC (PPUPEnv slot pp genDelegs, ppup, txup tx)
 
-  let outputValues = [v | (UTxOOut _ v) <- Set.toList (range (txouts txb))]
-  all (valueToCompactValue zeroV <=) outputValues ?! NegativeOutputsUTxO
-<<<<<<< HEAD
-
-  let (Value vls) = _forge txb
-  let cids = Map.keys vls
-  all (adaID /=) cids  ?! ForgingAda
-
-=======
->>>>>>> multicur no testing
+  let outputValues = [getValue utxoout | utxoout <- Set.toList (range (txouts txb))]
+  all (zeroV <=) outputValues ?! NegativeOutputsUTxO
 
   let (Value vls) = _forge txb
   let cids = Map.keys vls
