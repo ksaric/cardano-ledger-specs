@@ -15,6 +15,7 @@ module Test.Shelley.Spec.Ledger.PreSTSMutator
     , mutateTx
     , mutateTxBody
     , mutateDCert
+    , mutateValue
     , getAnyStakeKey
     ) where
 
@@ -38,10 +39,11 @@ import           Shelley.Spec.Ledger.Delegation.Certificates (pattern DeRegKey, 
                      pattern GenesisDelegCert, pattern MIRCert, pattern RegKey, pattern RegPool,
                      pattern RetirePool)
 import           Shelley.Spec.Ledger.Keys (KeyRole(..), coerceKeyRole, hashKey, vKey)
+import           Shelley.Spec.Ledger.Value
 
 import           Shelley.Spec.Ledger.Slot
 import           Shelley.Spec.Ledger.Tx (pattern Tx, pattern TxBody, pattern TxIn, pattern TxOut,
-                     _body, _certs, _inputs, _outputs, _ttl, _txfee, _wdrls, _witnessMSigMap,
+                     _body, _certs, _inputs, _outputs, _ttl, _txfee, _wdrls, _forge, _witnessMSigMap,
                      _witnessVKeySet)
 import           Shelley.Spec.Ledger.TxData (pattern DCertDeleg,
                      pattern DCertGenesis, pattern DCertMir, pattern DCertPool, pattern Delegation,
@@ -73,8 +75,14 @@ mutateNat lower upper n =
 
 -- | Mutator for 'Coin' values, based on mutation of the contained value field.
 mutateCoin :: Natural -> Natural -> Coin -> Gen Coin
-mutateCoin lower upper (Coin val) =
-  Coin . fromIntegral <$> mutateNat lower upper (fromIntegral val)
+mutateCoin lower upper (Coin c) =
+  Coin . fromIntegral <$> mutateNat lower upper (fromIntegral c)
+
+-- | Mutator for 'Value', based on mutation of the contained value field.
+-- TODO make this correct
+mutateValue :: (Crypto crypto) => Integer -> Integer -> Value crypto -> Gen (Value crypto)
+mutateValue lower upper v = (coinToValue . Coin) <$> mutateNat lower upper (fromIntegral c)
+  where (Coin c) = getAdaAmount v
 
 -- | Mutator of 'Tx' which mutates the contained transaction
 mutateTx :: Tx -> Gen Tx
@@ -91,6 +99,7 @@ mutateTxBody tx = do
   pure $ TxBody (Set.fromList inputs')
     outputs'
     (_certs tx)
+    (_forge tx)
     (_wdrls tx)
     (_txfee tx)
     (_ttl tx)
@@ -126,7 +135,7 @@ mutateOutputs (txout :<| txouts) = do
 -- the output.
 mutateOutput :: TxOut -> Gen TxOut
 mutateOutput (TxOut addr c) = do
-  c' <- mutateCoin 0 100 c
+  c' <- mutateValue 0 100 c
   pure $ TxOut addr c'
 
 
@@ -141,8 +150,8 @@ getAnyStakeKey keys = vKey . snd <$> Gen.element keys
 
 -- | Mutate 'Epoch' analogously to 'Coin' data.
 mutateEpoch :: Natural -> Natural -> EpochNo -> Gen EpochNo
-mutateEpoch lower upper (EpochNo val) = EpochNo . fromIntegral
-  <$> mutateNat lower upper (fromIntegral val)
+mutateEpoch lower upper (EpochNo v) = EpochNo . fromIntegral
+  <$> mutateNat lower upper (fromIntegral v)
 
 -- | Mutator for delegation certificates.
 -- A 'RegKey' and 'DeRegKey' select randomly a key fomr the supplied list of

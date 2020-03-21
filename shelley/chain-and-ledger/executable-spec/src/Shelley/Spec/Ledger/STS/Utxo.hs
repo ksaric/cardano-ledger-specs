@@ -68,7 +68,7 @@ instance
     | MaxTxSizeUTxO Integer Integer
     | InputSetEmptyUTxO
     | FeeTooSmallUTxO Coin Coin
-    | ValueNotConservedUTxO (Value crypto) (Value crypto)
+    | ValueNotConservedUTxO ValueBSType ValueBSType
     | NegativeOutputsUTxO
     | ForgingAda
     | UpdateFailure (PredicateFailure (PPUP crypto))
@@ -161,7 +161,7 @@ utxoInductive = do
 
   let consumed_ = consumed pp utxo stakeCreds txb
       produced_ = produced pp stakepools txb
-  consumed_ == produced_ ?! ValueNotConservedUTxO consumed_ produced_
+  consumed_ == produced_ ?! ValueNotConservedUTxO (toValBST consumed_) (toValBST produced_)
 
   -- process Protocol Parameter Update Proposals
   ppup' <- trans @(PPUP crypto) $ TRC (PPUPEnv slot pp genDelegs, ppup, txup tx)

@@ -69,6 +69,7 @@ import           Shelley.Spec.Ledger.TxData (pattern DCertDeleg, pattern DCertPo
                      Wdrl (..))
 import           Shelley.Spec.Ledger.UTxO (pattern UTxO, balance, hashTxBody, makeWitnessVKey)
 import           Shelley.Spec.Ledger.Validation (ValidationError (..), Validity (..))
+import           Shelley.Spec.Ledger.Value
 
 import           Test.Shelley.Spec.Ledger.ConcreteCryptoTypes
 import           Test.Shelley.Spec.Ledger.PreSTSMutator
@@ -98,7 +99,6 @@ utxoSize :: UTxO -> Int
 utxoSize (UTxO m) = Map.size m
 
 -- | Extract the map in an 'UTxO'.
-utxoMap :: UTxO -> Map TxIn TxOut
 utxoMap (UTxO m) = m
 
 -- | Generates a list of '(pay, stake)' key pairs.
@@ -137,11 +137,16 @@ genCoinList minCoin maxCoin lower upper = do
         $ Gen.integral (Range.exponential minCoin maxCoin)
   return (Coin <$> xs)
 
+--TODO make correct
+genValueList minCoin maxCoin lower upper = do
+  xs <- genCoinList minCoin maxCoin lower upper
+  return (fmap coinToValue xs)
+
 -- | Generator for a list of 'TxOut' where for each 'Addr' of 'addrs' one Coin
 -- value is generated.
 genTxOut :: [Addr] -> Gen [TxOut]
 genTxOut addrs = do
-  ys <- genCoinList 100 10000 (length addrs) (length addrs)
+  ys <- genValueList 100 10000 (length addrs) (length addrs)
   return (uncurry TxOut <$> zip addrs ys)
 
 -- TODO generate sensible protocol constants
@@ -166,11 +171,12 @@ genTx keyList (UTxO m) cslot = do
   -- select payer
   selectedInputs <- Gen.shuffle utxoInputs
   let !selectedAddr    = addr $ head selectedInputs
-  let !selectedUTxO    = Map.filter (\(TxOut a _) -> a == selectedAddr) m
+  let !selectedUTxO    = Map.filter (\out -> getAddress out == selectedAddr) m
   let !selectedKeyPair = findPayKeyPair selectedAddr keyList
   let !selectedBalance = balance $ UTxO selectedUTxO
 
   -- select receipients, distribute balance of selected UTxO set
+  -- TODO whats up with coin vs value here
   n <- genNatural 1 10 -- (fromIntegral $ length keyList) -- TODO make this variable, but uses too much RAM atm
   receipients <- Seq.fromList . take (fromIntegral n) <$> Gen.shuffle keyList
   let realN                = length receipients
@@ -183,8 +189,9 @@ genTx keyList (UTxO m) cslot = do
   txttl <- genWord64 1 100
   let !txbody = TxBody
            (Map.keysSet selectedUTxO)
-           (StrictSeq.toStrict ((`TxOut` perReceipient) <$> receipientAddrs))
+           (StrictSeq.toStrict ((`TxOut` (coinToValue perReceipient)) <$> receipientAddrs))
            StrictSeq.Empty
+           zeroV -- TODO generate forges
            (Wdrl Map.empty) -- TODO generate witdrawals
            txfee'
            (cslot + SlotNo txttl)
@@ -194,7 +201,7 @@ genTx keyList (UTxO m) cslot = do
   let !txwit = makeWitnessVKey txbHash selectedKeyPair
   pure (txfee', Tx txbody (Set.fromList [txwit]) Map.empty SNothing)
             where utxoInputs = Map.keys m
-                  addr inp   = getTxOutAddr $ m Map.! inp
+                  addr inp   = getAddress $ m Map.! inp
 
 -- | Generator for new transaction state transition, starting from a
 -- 'LedgerState' and using a list of pairs of 'KeyPair'. Returns either the
@@ -272,10 +279,6 @@ findStakeKeyPair :: Credential 'Staking -> KeyPairs -> KeyPair 'Staking
 findStakeKeyPair (KeyHashObj hk) keyList =
     snd $ head $ filter (\(_, stake) -> hk == hashKey (vKey stake)) keyList
 findStakeKeyPair _ _ = undefined -- TODO treat script case
-
--- | Returns the hashed 'addr' part of a 'TxOut'.
-getTxOutAddr :: TxOut -> Addr
-getTxOutAddr (TxOut addr _) = addr
 
 -- | Generator for arbitrary valid ledger state, discarding any generated
 -- invalid one.
