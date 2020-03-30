@@ -66,7 +66,6 @@ import           Shelley.Spec.Ledger.TxData (pattern DeRegKey,
                      pattern Delegate, pattern Delegation, PoolCert (..), PoolParams (..),
                      TxBody (..), TxId (..), TxIn (..), Wdrl (..), UTxOOut(..),
                      WitVKey (..), getRwdCred, getAddress, getValue, getAddressTx, getValueTx)
-import           Shelley.Spec.Ledger.Updates (Update)
 
 import           Shelley.Spec.Ledger.Scripts
 import           Shelley.Spec.Ledger.Value

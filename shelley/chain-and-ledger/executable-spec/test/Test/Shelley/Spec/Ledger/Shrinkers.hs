@@ -23,7 +23,6 @@ import           Shelley.Spec.Ledger.Scripts
 import           Shelley.Spec.Ledger.Slot
 import           Shelley.Spec.Ledger.Tx
 import           Shelley.Spec.Ledger.TxData
-import           Shelley.Spec.Ledger.Scripts
 import           Test.Shelley.Spec.Ledger.ConcreteCryptoTypes (Block)
 
 shrinkBlock
