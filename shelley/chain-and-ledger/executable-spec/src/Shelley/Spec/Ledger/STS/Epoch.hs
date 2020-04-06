@@ -14,7 +14,7 @@ module Shelley.Spec.Ledger.STS.Epoch
 where
 
 import           Cardano.Prelude (NoUnexpectedThunks (..), asks)
-import           Cardano.Ledger.Shelley.Crypto
+import           Shelley.Spec.Ledger.Crypto
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import           GHC.Generics (Generic)

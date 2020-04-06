@@ -12,7 +12,7 @@ module Shelley.Spec.Ledger.STS.Snap
   )
 where
 
-import           Cardano.Ledger.Shelley.Crypto
+import           Shelley.Spec.Ledger.Crypto
 import           Cardano.Prelude (NoUnexpectedThunks (..))
 import           Control.Monad.Trans.Reader (asks)
 import           Control.State.Transition
