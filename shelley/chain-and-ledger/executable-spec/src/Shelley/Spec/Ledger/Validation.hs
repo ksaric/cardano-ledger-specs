@@ -20,6 +20,8 @@ data ValidationError =
   | RetirementCertExpired SlotNo SlotNo
   -- | The transaction fee is too small
   | FeeTooSmall Coin Coin
+  -- | Ada is being forged
+  | ForgingAda
   -- | Value is not conserved
   | ValueNotConserved ValueBSType ValueBSType
   -- | Unknown reward account
