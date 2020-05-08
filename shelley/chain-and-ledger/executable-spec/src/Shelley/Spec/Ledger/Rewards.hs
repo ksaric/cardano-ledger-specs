@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Shelley.Spec.Ledger.Rewards
@@ -44,6 +45,9 @@ import           Shelley.Spec.Ledger.PParams (PParams, _a0, _d, _nOpt)
 import           Shelley.Spec.Ledger.TxData (PoolParams (..), RewardAcnt (..))
 
 
+import GHC.Exts (Float#, Array#)
+
+
 newtype ApparentPerformance = ApparentPerformance { unApparentPerformance :: Double }
   deriving (Show, Eq, Generic, NoUnexpectedThunks)
 
@@ -53,8 +57,13 @@ instance ToCBOR ApparentPerformance
 instance FromCBOR ApparentPerformance
  where fromCBOR = ApparentPerformance <$> decodeDouble
 
+data Histogram = Histogram { points :: Array# Float# }
+
+bucketIntervals :: [Float]
+bucketIntervals = undefined
+
 data NonMyopic crypto= NonMyopic
-  { apparentPerformances :: !(Map (KeyHash 'StakePool crypto) ApparentPerformance)
+  { histograms :: !(Map (KeyHash 'StakePool crypto) Histogram)
   , rewardPot :: !Coin
   , snap :: !(SnapShot crypto)
   } deriving (Show, Eq, Generic)
