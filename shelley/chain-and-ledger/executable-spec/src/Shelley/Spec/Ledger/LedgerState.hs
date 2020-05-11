@@ -107,7 +107,7 @@ import           Shelley.Spec.Ledger.PParams (PParams, ProposedPPUpdates (..), U
 import           Shelley.Spec.Ledger.Slot (Duration (..), EpochNo (..), SlotNo (..), epochInfoEpoch,
                      epochInfoFirst, epochInfoSize, (+*), (-*))
 import           Shelley.Spec.Ledger.Tx (Tx (..), extractKeyHash)
-import           Shelley.Spec.Ledger.TxData (Addr (..), Credential (..), DelegCert (..), Ix,
+import           Shelley.Spec.Ledger.TxData (DelegCert (..), Ix,
                      MIRCert (..), PoolCert (..), PoolMetaData (..), PoolParams (..), Ptr (..),
                      RewardAcnt (..), TxBody (..), TxId (..), TxIn (..), TxOut (..), Url (..), UTxOOut(..),
                      Wdrl (..), getRwdCred, witKeyHash, getAddressTx, getValueTx)
@@ -527,8 +527,8 @@ genesisId =
    Set.empty
    StrictSeq.Empty
    StrictSeq.Empty
-   (Wdrl Map.empty)
    (Value Map.empty)
+   (Wdrl Map.empty)
    (Coin 0)
    (SlotNo 0)
    SNothing

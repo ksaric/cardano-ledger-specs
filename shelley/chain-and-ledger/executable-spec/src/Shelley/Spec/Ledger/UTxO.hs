@@ -245,7 +245,7 @@ scriptsNeeded u tx =
   `Set.union`
   Set.fromList (Maybe.mapMaybe scriptStakeCred (filter requiresVKeyWitness certificates))
   `Set.union`
-  Set.fromList (keys $ val $ _forge $ _body tx)
+  Set.fromList (Map.keys $ val $ _forge $ _body tx)
   where withdrawals = unWdrl $ _wdrls $ _body tx
         UTxO u'' = txinsScript (txins $ _body tx) u <| u
         certificates = (toList . _certs . _body) tx

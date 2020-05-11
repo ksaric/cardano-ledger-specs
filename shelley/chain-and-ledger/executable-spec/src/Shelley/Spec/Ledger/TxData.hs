@@ -37,6 +37,7 @@ module Shelley.Spec.Ledger.TxData
     , _inputs
     , _outputs
     , _certs
+    , _forge
     , _wdrls
     , _txfee
     , _ttl
@@ -46,12 +47,18 @@ module Shelley.Spec.Ledger.TxData
   , TxId (..)
   , TxIn (..)
   , TxOut (..)
+  , UTxOOut (..)
   , Url
   , Wdrl (..)
   , WitVKey (WitVKey, wvkBytes)
   --
   , witKeyHash
   , addStakeCreds
+  , getAddress
+  , getValue
+  , getAddressTx
+  , getValueTx
+  , getCoin
 )
   where
 
@@ -293,8 +300,8 @@ data TxBody crypto
       { _inputs'   :: !(Set (TxIn crypto))
       , _outputs'  :: !(StrictSeq (TxOut crypto))
       , _certs'    :: !(StrictSeq (DCert crypto))
-      , _wdrls'    :: !(Wdrl crypto)
       , _forge'    :: !(Value crypto)
+      , _wdrls'    :: !(Wdrl crypto)
       , _txfee'    :: !Coin
       , _ttl'      :: !SlotNo
       , _txUpdate' :: !(StrictMaybe (Update crypto))
@@ -309,6 +316,7 @@ pattern TxBody
   => Set (TxIn crypto)
   -> StrictSeq (TxOut crypto)
   -> StrictSeq (DCert crypto)
+  -> Value crypto
   -> Wdrl crypto
   -> Coin
   -> SlotNo
@@ -316,11 +324,12 @@ pattern TxBody
   -> StrictMaybe (MetaDataHash crypto)
   -> TxBody crypto
 pattern TxBody
- { _inputs, _outputs, _certs, _wdrls, _txfee, _ttl, _txUpdate, _mdHash } <-
+ { _inputs, _outputs, _certs, _forge, _wdrls, _txfee, _ttl, _txUpdate, _mdHash } <-
  TxBody'
    { _inputs'   = _inputs
    , _outputs'  = _outputs
    , _certs'    =  _certs
+   , _forge'    =  _forge
    , _wdrls'    = _wdrls
    , _txfee'    = _txfee
    , _ttl'      = _ttl
@@ -328,7 +337,7 @@ pattern TxBody
    , _mdHash'   = _mdHash
    }
   where
-  TxBody _inputs _outputs _certs _wdrls _txfee _ttl _txUpdate _mdHash =
+  TxBody _inputs _outputs _certs _forge _wdrls _txfee _ttl _txUpdate _mdHash =
     let encodeMapElement ix enc x = Just (encodeWord ix <> enc x)
         encodeMapElementUnless condition ix enc x = if condition x
           then Nothing
@@ -339,13 +348,14 @@ pattern TxBody
           , encodeMapElement 2 toCBOR _txfee
           , encodeMapElement 3 toCBOR _ttl
           , encodeMapElementUnless null 4 encodeFoldable _certs
-          , encodeMapElementUnless (null . unWdrl) 5 toCBOR _wdrls
-          , encodeMapElement 6 toCBOR =<< strictMaybeToMaybe _txUpdate
-          , encodeMapElement 7 toCBOR =<< strictMaybeToMaybe _mdHash
+          , encodeMapElementUnless (null . val) 5 toCBOR _forge
+          , encodeMapElementUnless (null . unWdrl) 6 toCBOR _wdrls
+          , encodeMapElement 7 toCBOR =<< strictMaybeToMaybe _txUpdate
+          , encodeMapElement 8 toCBOR =<< strictMaybeToMaybe _mdHash
           ]
         n = fromIntegral $ length l
         bytes = serializeEncoding $ encodeMapLen n <> fold l
-     in TxBody' _inputs _outputs _certs _wdrls _txfee _ttl _txUpdate _mdHash bytes
+     in TxBody' _inputs _outputs _certs _forge _wdrls _txfee _ttl _txUpdate _mdHash bytes
 
 {-# COMPLETE TxBody #-}
 
@@ -494,22 +504,21 @@ instance (Crypto crypto) =>
     (b :: Word64) <- fromCBOR
     pure $ TxIn a (fromInteger $ toInteger b)
 
+
 instance
   (Typeable crypto, Crypto crypto)
   => ToCBOR (UTxOOut crypto)
  where
   toCBOR (UTxOOut addr value) =
-    encodeListLen (listLen addr + 1)
-      <> toCBORGroup addr
+    encodeListLen 2
+      <> toCBOR addr
       <> toCBOR value
 
 instance (Crypto crypto) =>
   FromCBOR (UTxOOut crypto) where
-  fromCBOR = do
-    n <- decodeListLen
-    addr <- fromCBORGroup
+  fromCBOR = decodeRecordNamed "UTxOOut" (const 2) $ do
+    addr <- fromCBOR
     b <- fromCBOR
-    matchSize "TxOut" ((fromIntegral . toInteger . listLen) addr + 1) n
     pure $ UTxOOut addr b
 
 instance
@@ -517,17 +526,15 @@ instance
   => ToCBOR (TxOut crypto)
  where
   toCBOR (TxOut addr value) =
-    encodeListLen (listLen addr + 1)
-      <> toCBORGroup addr
+    encodeListLen 2
+      <> toCBOR addr
       <> toCBOR (valueToCompactValue value)
 
 instance (Crypto crypto) =>
   FromCBOR (TxOut crypto) where
-  fromCBOR = do
-    n <- decodeListLen
-    addr <- fromCBORGroup
+  fromCBOR = decodeRecordNamed "TxOut" (const 2) $ do
+    addr <- fromCBOR
     b <- fromCBOR
-    matchSize "TxOut" ((fromIntegral . toInteger . listLen) addr + 1) n
     pure $ TxOut addr (compactValueToValue b)
 
 instance
