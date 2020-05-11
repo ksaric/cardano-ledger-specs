@@ -110,9 +110,7 @@ import           Shelley.Spec.Ledger.Tx (Tx (..), extractKeyHash)
 import           Shelley.Spec.Ledger.TxData (DelegCert (..), Ix,
                      MIRCert (..), PoolCert (..), PoolMetaData (..), PoolParams (..), Ptr (..),
                      RewardAcnt (..), TxBody (..), TxId (..), TxIn (..), TxOut (..), Url (..), UTxOOut(..),
-                     Wdrl (..), getRwdCred, witKeyHash, getAddressTx, getValueTx)
--- import           Shelley.Spec.Ledger.Updates (AVUpdate (..), Mdt (..), PPUpdate (..), Update (..),
---                      UpdateState (..), apps, emptyUpdate, emptyUpdateState)
+                     Wdrl (..), getRwdCred, witKeyHash, getAddressTx, getValueTx, getCoin)
 import           Shelley.Spec.Ledger.UTxO (UTxO (..), balance, totalDeposits, txinLookup, txins,
                      txouts, txup, verifyWitVKey)
 import           Shelley.Spec.Ledger.Validation (ValidationError (..), Validity (..))
@@ -1018,21 +1016,23 @@ updateNonMypopic nm rPot aps ss = nm
 
 -- | Compute the total stake
 totalStake
-  :: LedgerState crypto
+  :: Crypto crypto
+  => LedgerState crypto
   -> Coin
 totalStake ls = totalUtxoStake + totalRewardStake
   where
-    outputStake (TxOut (Addr _ (StakeRefBase _)) c) = c
-    outputStake (TxOut (Addr _ (StakeRefPtr _ )) c) = c
-    outputStake (TxOut (Addr _ (StakeRefNull  )) _) = 0
-    outputStake (TxOut (AddrBootstrap _)         _) = 0
+    outputStake ot@(UTxOOut (Addr _ (StakeRefBase _)) _) = getCoin ot
+    outputStake ot@(UTxOOut (Addr _ (StakeRefPtr _ )) _) = getCoin ot
+    outputStake (UTxOOut (Addr _ (StakeRefNull  )) _) = 0
+    outputStake (UTxOOut (AddrBootstrap _)         _) = 0
     (UTxO utxo) = _utxo . _utxoState $ ls
     totalUtxoStake = Map.foldl' (\acc out -> outputStake out + acc) 0 utxo
     totalRewardStake = sum $ _rewards . _dstate . _delegationState $ ls
 
 -- | Create a reward update
 createRUpd
-  :: EpochNo
+  :: Crypto crypto
+  => EpochNo
   -> BlocksMade crypto
   -> EpochState crypto
   -> ShelleyBase (RewardUpdate crypto)
