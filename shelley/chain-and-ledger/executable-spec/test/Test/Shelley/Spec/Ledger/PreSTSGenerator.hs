@@ -66,7 +66,7 @@ import           Shelley.Spec.Ledger.Tx (pattern Tx, pattern TxBody, pattern TxO
 import           Shelley.Spec.Ledger.TxData (pattern DCertDeleg, pattern DCertPool,
                      pattern DeRegKey, pattern Delegate, pattern Delegation,
                      pattern RegKey, pattern RetirePool, StakeCreds (..),
-                     Wdrl (..))
+                     Wdrl (..), getAddress)
 import           Shelley.Spec.Ledger.UTxO (pattern UTxO, balance, hashTxBody, makeWitnessVKey)
 import           Shelley.Spec.Ledger.Validation (ValidationError (..), Validity (..))
 import           Shelley.Spec.Ledger.Value
@@ -180,7 +180,7 @@ genTx keyList (UTxO m) cslot = do
   n <- genNatural 1 10 -- (fromIntegral $ length keyList) -- TODO make this variable, but uses too much RAM atm
   receipients <- Seq.fromList . take (fromIntegral n) <$> Gen.shuffle keyList
   let realN                = length receipients
-  let (perReceipient, txfee') = splitCoin selectedBalance (fromIntegral realN)
+  let (perReceipient, txfee') = splitCoin (getAdaAmount selectedBalance) (fromIntegral realN)
   let !receipientAddrs = fmap (\(p, d) ->
                            Addr
                              (KeyHashObj . hashKey $ vKey p)

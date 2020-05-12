@@ -162,6 +162,7 @@ import           Shelley.Spec.Ledger.TxData (pattern DCertDeleg, pattern DCertGe
                      _poolRAcnt, _poolRelays, _poolVrf)
 import qualified Shelley.Spec.Ledger.TxData as TxData (TxBody (..))
 import           Shelley.Spec.Ledger.UTxO (pattern UTxO, balance, hashTxBody, makeWitnessesVKey, txid)
+import           Shelley.Spec.Ledger.Value
 
 import           Test.Shelley.Spec.Ledger.ConcreteCryptoTypes (Addr, Block, CHAIN, ChainState,
                      ConcreteCrypto, Credential, DState, EpochState, pattern GenDelegs, HashHeader,
@@ -172,6 +173,7 @@ import           Test.Shelley.Spec.Ledger.ConcreteCryptoTypes (Addr, Block, CHAI
 import           Test.Shelley.Spec.Ledger.Generator.Core (AllPoolKeys (..), NatNonce (..),
                      genesisAccountState, mkBlock, mkOCert, zero)
 import           Test.Shelley.Spec.Ledger.Utils
+
 
 data CHAINExample =
   CHAINExample { currentSlotNo    :: SlotNo       -- ^ Current slot
@@ -249,11 +251,11 @@ bobAddr = mkAddr (bobPay, bobStake)
 bobSHK :: Credential 'Staking
 bobSHK = (KeyHashObj . hashKey . vKey) bobStake
 
-aliceInitCoin :: Coin
-aliceInitCoin = 10*1000*1000*1000*1000*1000
+aliceInitCoin :: Value crypto -- TODO is this OK?
+aliceInitCoin = coinToValue $ 10*1000*1000*1000*1000*1000
 
-bobInitCoin :: Coin
-bobInitCoin = 1*1000*1000*1000*1000*1000
+bobInitCoin :: Value crypto -- TODO is this OK?
+bobInitCoin = coinToValue $ 1*1000*1000*1000*1000*1000
 
 alicePoolParams :: PoolParams
 alicePoolParams =
@@ -439,7 +441,7 @@ ex1 = CHAINExample (SlotNo 1) initStEx1 blockEx1 (Right expectedStEx1)
 utxoEx2A :: UTxO
 utxoEx2A = genesisCoins
        [ TxOut aliceAddr aliceInitCoin
-       , TxOut bobAddr   bobInitCoin
+       , TxOut bobAddr bobInitCoin
        ]
 
 -- | Register a single pool with 255 coins of deposit
@@ -474,8 +476,8 @@ updateEx2A :: Update
 updateEx2A = Update ppupEx2A (EpochNo 0)
 
 
-aliceCoinEx2A :: Coin
-aliceCoinEx2A = aliceInitCoin - (_poolDeposit ppsEx1) - 3 * (_keyDeposit ppsEx1) - 3
+aliceCoinEx2A :: Value crypto -- TODO change this
+aliceCoinEx2A = aliceInitCoin - coinToValue ((_poolDeposit ppsEx1) - 3 * (_keyDeposit ppsEx1) - 3)
 
 -- | Transaction body to be processed.
 txbodyEx2A :: TxBody
@@ -483,11 +485,13 @@ txbodyEx2A = TxBody
            (Set.fromList [TxIn genesisId 0])
            (StrictSeq.fromList [TxOut aliceAddr aliceCoinEx2A])
            (StrictSeq.fromList ([ DCertDeleg (RegKey aliceSHK)
+           zeroV -- TODO make up forge and value ^^
            , DCertDeleg (RegKey bobSHK)
            , DCertDeleg (RegKey carlSHK)
            , DCertPool (RegPool alicePoolParams)
            ] ++ [DCertMir (MIRCert (Map.fromList [ (carlSHK, 110)
                                                  , (dariaSHK, 99)]))]))
+           zeroV -- TODO put value
            (Wdrl Map.empty)
            (Coin 3)
            (SlotNo 10)
@@ -529,7 +533,7 @@ lsEx2A = LedgerState utxostEx2A (DPState dsEx1 psEx1)
 acntEx2A :: AccountState
 acntEx2A = AccountState
             { _treasury = Coin 0
-            , _reserves = maxLLSupply - balance utxoEx2A
+            , _reserves = maxLLSupply - (getAdaAmount $ balance utxoEx2A) -- TODO is this ok?
             }
 
 esEx2A :: EpochState
@@ -558,7 +562,7 @@ initStEx2A = initialShelleyState
   (At $ LastAppliedBlock (BlockNo 0) (SlotNo 0) lastByronHeaderHash)
   (EpochNo 0)
   utxoEx2A
-  (maxLLSupply - balance utxoEx2A)
+  (maxLLSupply - (getAdaAmount $ balance utxoEx2A)) -- TODO is this ok?
   genDelegs
   overlayEx2A
   ppsEx1
@@ -603,8 +607,8 @@ expectedLSEx2A :: LedgerState
 expectedLSEx2A = LedgerState
                (UTxOState
                  (UTxO . Map.fromList $
-                   [ (TxIn genesisId 1, TxOut bobAddr bobInitCoin)
-                   , (TxIn (txid txbodyEx2A) 0, TxOut aliceAddr aliceCoinEx2A)
+                   [ (TxIn genesisId 1, UTxOOut bobAddr (valueToCompactValue bobInitCoin))
+                   , (TxIn (txid txbodyEx2A) 0, UTxOOut aliceAddr (valueToCompactValue aliceCoinEx2A))
                    ])
                  (Coin 271)
                  (Coin 3)
@@ -645,11 +649,11 @@ ex2A = CHAINExample (SlotNo 10) initStEx2A blockEx2A (Right expectedStEx2A)
 
 -- * Example 2B - process a block late enough in the epoch in order to create a reward update.
 
-aliceCoinEx2BBase :: Coin
-aliceCoinEx2BBase = 5*1000*1000*1000*1000*1000
+aliceCoinEx2BBase :: Value crypto
+aliceCoinEx2BBase = coinToValue (5*1000*1000*1000*1000*1000)
 
-aliceCoinEx2BPtr :: Coin
-aliceCoinEx2BPtr = aliceCoinEx2A - (aliceCoinEx2BBase + 4)
+aliceCoinEx2BPtr :: Value crypto
+aliceCoinEx2BPtr = coinToValue (aliceCoinEx2A - (aliceCoinEx2BBase + 4))
 
 -- | The transaction delegates Alice's and Bob's stake to Alice's pool.
 --   Additionally, we split Alice's ADA between a base address and a pointer address.
@@ -662,6 +666,7 @@ txbodyEx2B = TxBody
       , TxData._certs    =
         StrictSeq.fromList [ DCertDeleg (Delegate $ Delegation aliceSHK (hk alicePool))
                            , DCertDeleg (Delegate $ Delegation bobSHK   (hk alicePool))]
+      , TxData._forge    = zeroV -- TODO put value
       , TxData._wdrls    = Wdrl Map.empty
       , TxData._txfee    = Coin 4
       , TxData._ttl      = SlotNo 90
@@ -929,6 +934,7 @@ txbodyEx2D = TxBody
       , TxData._outputs  = StrictSeq.fromList [ TxOut aliceAddr aliceCoinEx2DBase ]
       , TxData._certs    =
         StrictSeq.fromList [ DCertDeleg (Delegate $ Delegation carlSHK (hk alicePool)) ]
+      , TxData._forge    = zeroV -- TODO put value
       , TxData._wdrls    = Wdrl Map.empty
       , TxData._txfee    = Coin 5
       , TxData._ttl      = SlotNo 500
@@ -1431,6 +1437,7 @@ txbodyEx2J = TxBody
            (Set.fromList [TxIn genesisId 1])
            (StrictSeq.singleton $ TxOut bobAddr bobAda2J)
            (StrictSeq.fromList [DCertDeleg (DeRegKey bobSHK)])
+           zeroV -- TODO is this ok?
            (Wdrl $ Map.singleton (RewardAcnt bobSHK) bobRAcnt2H)
            (Coin 9)
            (SlotNo 500)
@@ -1527,6 +1534,7 @@ txbodyEx2K = TxBody
            (Set.fromList [TxIn (txid txbodyEx2D) 0])
            (StrictSeq.singleton $ TxOut alicePtrAddr aliceCoinEx2KPtr)
            (StrictSeq.fromList [DCertPool (RetirePool (hk alicePool) (EpochNo 5))])
+           zeroV -- TODO ? ok
            (Wdrl Map.empty)
            (Coin 2)
            (SlotNo 500)
@@ -1737,6 +1745,7 @@ txbodyEx3A = TxBody
            (Set.fromList [TxIn genesisId 0])
            (StrictSeq.singleton $ TxOut aliceAddr aliceCoinEx3A)
            StrictSeq.empty
+           zeroV -- TODO is this ok?
            (Wdrl Map.empty)
            (Coin 1)
            (SlotNo 10)
@@ -1829,6 +1838,7 @@ txbodyEx3B = TxBody
            (Set.fromList [TxIn (txid txbodyEx3A) 0])
            (StrictSeq.singleton $ TxOut aliceAddr aliceCoinEx3B)
            StrictSeq.empty
+           zeroV -- TODO is this ok?
            (Wdrl Map.empty)
            (Coin 1)
            (SlotNo 31)
@@ -1989,6 +1999,7 @@ txbodyEx4A = TxBody
               (StrictSeq.fromList [DCertGenesis (GenesisDelegCert
                                        (hashKey (coreNodeVKG 0))
                                        (hashKey (vKey newGenDelegate)))])
+              zeroV -- TODO is this ok?
               (Wdrl Map.empty)
               (Coin 1)
               (SlotNo 10)
@@ -2144,6 +2155,7 @@ txbodyEx5A = TxBody
               (Set.fromList [TxIn genesisId 0])
               (StrictSeq.singleton $ TxOut aliceAddr aliceCoinEx5A)
               (StrictSeq.fromList [DCertMir (MIRCert ir)])
+              zeroV -- TODO is this ok?
               (Wdrl Map.empty)
               (Coin 1)
               (SlotNo 10)
@@ -2313,6 +2325,7 @@ txbodyEx5F = TxBody
               (Set.fromList [TxIn genesisId 0])
               (StrictSeq.singleton $ TxOut aliceAddr aliceCoinEx5F)
               (StrictSeq.fromList [DCertDeleg (RegKey aliceSHK), DCertMir (MIRCert ir)])
+              zeroV -- TODO is this ok?
               (Wdrl Map.empty)
               (Coin 1)
               (SlotNo 99)
@@ -2358,6 +2371,7 @@ txbodyEx5F' = TxBody
                (Set.fromList [TxIn (txid txbodyEx5F) 0])
                (StrictSeq.singleton $ TxOut aliceAddr aliceCoinEx5F')
                StrictSeq.empty
+               zeroV -- TODO is this ok?
                (Wdrl Map.empty)
                (Coin 1)
                ((slotFromEpoch $ EpochNo 1)
@@ -2395,6 +2409,7 @@ txbodyEx5F'' = TxBody
                 (Set.fromList [TxIn (txid txbodyEx5F') 0])
                 (StrictSeq.singleton $ TxOut aliceAddr aliceCoinEx5F'')
                 StrictSeq.empty
+                zeroV -- TODO is this ok?
                 (Wdrl Map.empty)
                 (Coin 1)
                 ((slotFromEpoch $ EpochNo 2) + SlotNo 10)

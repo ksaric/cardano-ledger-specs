@@ -19,6 +19,8 @@ module Test.Shelley.Spec.Ledger.PreSTSMutator
     , getAnyStakeKey
     ) where
 
+import           Shelley.Spec.Ledger.Crypto (Crypto)
+
 import qualified Data.List as List (map)
 import qualified Data.Map.Strict as Map (fromList, toList)
 import           Data.Maybe (fromMaybe)
