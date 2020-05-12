@@ -48,6 +48,8 @@ instance
     | InvalidSignatureOCERT
     | InvalidKesSignatureOCERT Natural Natural Natural String
     | NoCounterForKeyHashOCERT
+    | TESToffByOneBeforeOCERT
+    | TESToffByOneAfterOCERT
     deriving (Show, Eq, Generic)
 
   initialRules = [pure Map.empty]
@@ -79,9 +81,23 @@ ocertTransition = judgmentContext >>= \(TRC (env, cs, BHeader bhb sigma)) -> do
                                               -- above `KESBeforeStartOCERT`
                                               -- predicate failure in the
                                               -- transition.
-
+                                              --
   verifySignedDSIGN vkey (vk_hot, n, c0) tau ?! InvalidSignatureOCERT
   verifySignedKES () vk_hot t bhb sigma ?!: InvalidKesSignatureOCERT kp_ c0_ t
+
+  {- TESTING -}
+  let tBefore = if t > 0 then Just (t-1) else Nothing
+  let tAfter = t + 1
+
+  case tBefore of
+    Nothing -> pure ()
+    Just tBefore' ->
+      case verifySignedKES () vk_hot tBefore' bhb sigma of
+        Right _ -> failBecause TESToffByOneBeforeOCERT
+        Left _  -> case verifySignedKES () vk_hot tAfter bhb sigma of
+                     Right _ -> failBecause TESToffByOneAfterOCERT
+                     Left _ -> pure ()
+  {- END TESTING -}
 
   case currentIssueNo env cs hk of
     Nothing -> do
