@@ -46,7 +46,7 @@ instance
     | KESAfterEndOCERT
     | KESPeriodWrongOCERT
     | InvalidSignatureOCERT
-    | InvalidKesSignatureOCERT Word Word Word String
+    | InvalidKesSignatureOCERT Natural Natural Natural String
     | NoCounterForKeyHashOCERT
     deriving (Show, Eq, Generic)
 
