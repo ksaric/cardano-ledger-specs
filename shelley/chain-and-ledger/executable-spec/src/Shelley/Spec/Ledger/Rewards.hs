@@ -44,8 +44,53 @@ import           Shelley.Spec.Ledger.Keys (KeyHash, KeyRole(..))
 import           Shelley.Spec.Ledger.PParams (PParams, _a0, _d, _nOpt)
 import           Shelley.Spec.Ledger.TxData (PoolParams (..), RewardAcnt (..))
 
+import Data.Sequence (Seq)
 
-import GHC.Exts (Float#, Array#)
+
+{- TODOs
+ - represent the histogram
+ -
+ - update the histogram using #blocks made & stake distribution
+ -   - produce the likelihood function
+ -   - calculate "integrals"
+ -   - logs of integrals
+ -   - normalize the histogram (because over time the numbers can drift to odd places)
+ -       + by adding
+ -   - decay the histogram
+ -       + by multiplying
+ - sample histogram 
+ - 
+ -
+ - pick our buckets (later?)
+ -
+ - -}
+
+newtype LogWeight = LogWeight Float
+newtype Weight = Weight Float
+
+toLogWeight :: Weight -> LogWeight
+toLogWeight (Weight l) = LogWeight (log l)
+
+fromLogWeight :: LogWeight -> Weight
+fromLogWeight (LogWeight l) = Weight (exp l)
+
+data Histogram = Histogram { points :: Seq LogWeight }
+
+likelihood
+ :: Int -- number of blocks produced this epoch
+ -> Float -- chance we're allowed to produce a block in this slot
+ -> EpochSize
+ -> Seq LogWeight
+likelihood n t (EpochSize slotsPerEpoch) = fromList $ bucketArea <$> samplePositions
+  where
+  samplePositions = (\x -> (x + 0.5) / 100.0) <$> [0.0 .. 99.0]
+  logBucketWidth = log 0.01
+  bucketArea position = LogWeight (f position + logBucketWidth)
+  f x = n * log x + (slotsPerEpoch - n) * log (1 - t * x)
+
+update :: Histogram -> Seq LogWeight -> Histogram
+update (Histogram points) likelihoods = undefined
+   
 
 
 newtype ApparentPerformance = ApparentPerformance { unApparentPerformance :: Double }
@@ -56,8 +101,6 @@ instance ToCBOR ApparentPerformance
 
 instance FromCBOR ApparentPerformance
  where fromCBOR = ApparentPerformance <$> decodeDouble
-
-data Histogram = Histogram { points :: Array# Float# }
 
 bucketIntervals :: [Float]
 bucketIntervals = undefined
