@@ -77,6 +77,7 @@ module Shelley.Spec.Ledger.LedgerState
 where
 
 import Byron.Spec.Ledger.Core (dom, (∪), (∪+), (⋪), (▷), (◁))
+import qualified Cardano.Chain.Common as Byron
 import Cardano.Binary
   ( FromCBOR (..),
     ToCBOR (..),
@@ -91,7 +92,6 @@ import Cardano.Crypto.Hash (hashWithSerialiser)
 import Cardano.Prelude (NoUnexpectedThunks (..))
 import Control.Monad.Trans.Reader (ReaderT (..), asks)
 import qualified Data.ByteString.Lazy as BSL (length)
-import Data.Coerce (coerce)
 import Data.Foldable (toList)
 import Data.List (foldl')
 import Data.List.NonEmpty (NonEmpty)
@@ -745,6 +745,19 @@ consumed pp u stakeKeys tx =
     refunds = keyRefunds pp stakeKeys tx
     withdrawals = sum . unWdrl $ _wdrls tx
 
+witsVKeyNeededBootstrap ::
+  forall crypto.
+  Crypto crypto =>
+  UTxO crypto ->
+  Tx crypto ->
+  Set (Byron.Address)
+witsVKeyNeededBootstrap utxo' tx = Set.foldr insertAddr Set.empty (_inputs . _body $ tx)
+  where
+    insertAddr txin addrs = case txinLookup txin utxo' of
+      Just (TxOut (AddrBootstrap a) _) -> Set.insert a addrs 
+      Just (TxOut (Addr _ _ _) _) -> addrs
+      Nothing -> addrs
+
 -- | Collect the set of hashes of keys that needs to sign a
 --  given transaction. This set consists of the txin owners,
 --  certificate authors, and withdrawal reward accounts.
@@ -763,13 +776,12 @@ witsVKeyNeeded utxo' tx@(Tx txbody _ _ _) _genDelegs =
     `Set.union` owners
   where
     inputAuthors = asWitness `Set.map` Set.foldr insertHK Set.empty (_inputs txbody)
-    unspendableKeyHash = KeyHash (coerce (hash 0 :: Hash crypto Int))
     insertHK txin hkeys =
       case txinLookup txin utxo' of
         Just (TxOut (Addr _ (KeyHashObj pay) _) _) -> Set.insert pay hkeys
-        Just (TxOut (AddrBootstrap _) _) -> Set.insert unspendableKeyHash hkeys
-        -- NOTE: Until Byron addresses are supported, we insert an unspendible keyhash
-        _ -> hkeys
+        Just (TxOut (Addr _ (ScriptHashObj _) _) _) -> hkeys
+        Just (TxOut (AddrBootstrap _) _) -> hkeys
+        Nothing -> hkeys
     wdrlAuthors =
       Set.map asWitness
         . Set.fromList
