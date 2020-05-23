@@ -58,6 +58,7 @@ module Shelley.Spec.Ledger.LedgerState
     consumed,
     verifiedWits,
     witsVKeyNeeded,
+    witsVKeyNeededBootstrap,
     -- DelegationState
     -- refunds
     keyRefunds,
@@ -805,8 +806,8 @@ witsVKeyNeeded utxo' tx@(Tx txbody _ _ _) _genDelegs =
     certificates = filter requiresVKeyWitness (toList $ _certs txbody)
     updateKeys = asWitness `Set.map` propWits (txup tx) _genDelegs
 
--- | Given a ledger state, determine if the UTxO witnesses in a given
---  transaction are correct.
+-- | Determine if the witnesses in a given transaction are correct
+-- (Not including Byron/Bootstrap addresses).
 verifiedWits ::
   ( Crypto crypto,
     DSignable crypto (Hash crypto (TxBody crypto))
@@ -814,6 +815,17 @@ verifiedWits ::
   Tx crypto ->
   Either [VKey 'Witness crypto] ()
 verifiedWits (Tx txbody wits _ _) =
+  case failed == mempty of
+    True -> Right ()
+    False -> Left $ fmap (\(WitVKey vk _) -> vk) failed
+  where
+    failed = filter (not . verifyWitVKey (hashWithSerialiser toCBOR txbody)) (Set.toList wits)
+
+-- | Determine if the Byron/Bootstrap witnesses in a given transaction are correct
+verifiedWitsBootstrap ::
+  Tx crypto ->
+  Either [VKey 'Witness crypto] ()
+verifiedWitsBootstrap (Tx txbody wits _ _) =
   case failed == mempty of
     True -> Right ()
     False -> Left $ fmap (\(WitVKey vk _) -> vk) failed

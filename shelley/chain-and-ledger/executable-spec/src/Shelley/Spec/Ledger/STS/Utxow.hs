@@ -46,7 +46,7 @@ import Shelley.Spec.Ledger.BaseTypes
 import Shelley.Spec.Ledger.Crypto
 import Shelley.Spec.Ledger.Delegation.Certificates (isInstantaneousRewards)
 import Shelley.Spec.Ledger.Keys
-import Shelley.Spec.Ledger.LedgerState (UTxOState (..), verifiedWits, witsVKeyNeeded)
+import Shelley.Spec.Ledger.LedgerState (UTxOState (..), verifiedWits, witsVKeyNeeded, witsVKeyNeededBootstrap)
 import Shelley.Spec.Ledger.MetaData (MetaDataHash, hashMetaData)
 import Shelley.Spec.Ledger.STS.Utxo
 import Shelley.Spec.Ledger.Scripts (ScriptHash)
@@ -204,6 +204,9 @@ utxoWitnessed =
             True -> Right ()
             False -> Left missingWitnesses
       haveNeededWitnesses ?!: MissingVKeyWitnessesUTXOW
+
+      -- check Byron/Bootstrap witnesses
+      let neededByron = witsVKeyNeededBootstrap utxo tx
 
       -- check metadata hash
       case (_mdHash txbody, md) of
